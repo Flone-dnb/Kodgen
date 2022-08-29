@@ -110,6 +110,16 @@ namespace kodgen
 			bool						logDiagnostic(CXTranslationUnit const& translationUnit)	const	noexcept;
 
 			/**
+			*	@brief Looks if there were critical errors after parsing of the provided translation unit.
+			*	An error is considered critical if it might cause incorrect type information when using reflection.
+			*
+			*	@param translationUnit Translation unit we want to get errors of.
+			* 
+			*	@return array of critical errors (if found).
+			*/
+			std::vector<std::string>	findCriticalErrors(CXTranslationUnit const& translationUnit)	const	noexcept;
+
+			/**
 			*	@brief Helper to get the ParsingResult contained in the context as a FileParsingResult.
 			*
 			*	@return The cast FileParsingResult.

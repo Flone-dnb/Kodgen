@@ -59,31 +59,43 @@ bool FileParser::parse(fs::path const& toParseFile, FileParsingResult& out_resul
 
 		if (translationUnit != nullptr)
 		{
-			ParsingContext& context = pushContext(translationUnit, out_result);
-
-			if (clang_visitChildren(context.rootCursor, &FileParser::parseNestedEntity, this) || !out_result.errors.empty())
+			// Look if there were critical errors.
+			const auto criticalErrors = findCriticalErrors(translationUnit);
+			if (criticalErrors.empty())
 			{
-				//ERROR
+				ParsingContext& context = pushContext(translationUnit, out_result);
+
+				if (clang_visitChildren(context.rootCursor, &FileParser::parseNestedEntity, this) || !out_result.errors.empty())
+				{
+					//ERROR
+				}
+				else
+				{
+					//Refresh all outer entities contained in the final result
+					refreshOuterEntity(out_result);
+
+					isSuccess = true;
+				}
+
+				popContext();
+
+				//There should not have any context left once parsing has finished
+				assert(contextsStack.empty());
+			
+				if (_settings->shouldLogDiagnostic)
+				{
+					logDiagnostic(translationUnit);
+				}
+
+				clang_disposeTranslationUnit(translationUnit);
 			}
 			else
 			{
-				//Refresh all outer entities contained in the final result
-				refreshOuterEntity(out_result);
-
-				isSuccess = true;
+				for (const auto& message : criticalErrors)
+				{
+					out_result.errors.emplace_back(message);
+				}
 			}
-
-			popContext();
-
-			//There should not have any context left once parsing has finished
-			assert(contextsStack.empty());
-
-			if (_settings->shouldLogDiagnostic)
-			{
-				logDiagnostic(translationUnit);
-			}
-
-			clang_disposeTranslationUnit(translationUnit);
 		}
 		else
 		{
@@ -266,6 +278,39 @@ void FileParser::postParse(fs::path const&, FileParsingResult const&) noexcept
 	/**
 	*	Default implementation does nothing special
 	*/
+}
+
+std::vector<std::string> FileParser::findCriticalErrors(CXTranslationUnit const& translationUnit) const noexcept
+{
+	const CXDiagnosticSet diagnostics = clang_getDiagnosticSetFromTU(translationUnit);
+	const unsigned int diagnosticsCount = clang_getNumDiagnosticsInSet(diagnostics);
+
+	std::vector<std::string> criticalErrors;
+	
+	for (unsigned i = 0u; i < diagnosticsCount; i++)
+	{
+		const CXDiagnostic diagnostic(clang_getDiagnosticInSet(diagnostics, i));
+
+		auto diagnosticMessage = Helpers::getString(clang_formatDiagnostic(diagnostic, clang_defaultDiagnosticDisplayOptions()));
+
+		if (diagnosticMessage.find("error:") != std::string::npos)
+		{
+			if (diagnosticMessage.find("use of undeclared identifier") != std::string::npos)
+			{
+				criticalErrors.push_back(diagnosticMessage + " (did you forgot to include the header?)");
+			}
+			else if (diagnosticMessage.find("no template named") != std::string::npos)
+			{
+				criticalErrors.push_back(diagnosticMessage + " (did you forgot to include the header?)");
+			}
+		}
+		
+		clang_disposeDiagnostic(diagnostic);
+	}
+
+	clang_disposeDiagnosticSet(diagnostics);
+
+	return criticalErrors;
 }
 
 bool FileParser::logDiagnostic(CXTranslationUnit const& translationUnit) const noexcept
