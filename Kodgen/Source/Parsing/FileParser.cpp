@@ -60,8 +60,8 @@ bool FileParser::parse(fs::path const& toParseFile, FileParsingResult& out_resul
 		if (translationUnit != nullptr)
 		{
 			// Look if there were errors.
-			const auto criticalErrors = findStandardTypesErrors(translationUnit);
-			if (criticalErrors.empty())
+			const auto typeErrors = findStandardTypesErrors(translationUnit);
+			if (typeErrors.empty())
 			{
 				ParsingContext& context = pushContext(translationUnit, out_result);
 
@@ -91,7 +91,7 @@ bool FileParser::parse(fs::path const& toParseFile, FileParsingResult& out_resul
 			}
 			else
 			{
-				for (const auto& message : criticalErrors)
+				for (const auto& message : typeErrors)
 				{
 					out_result.errors.emplace_back(message);
 				}
@@ -303,7 +303,17 @@ std::vector<std::string> FileParser::findStandardTypesErrors(CXTranslationUnit c
 				diagnosticMessage.find("no template named 'vector' in namespace 'std'") != std::string::npos ||
 				diagnosticMessage.find("no template named 'vector'") != std::string::npos)
 			{
-				criticalErrors.push_back(diagnosticMessage + " (please, include the header)");
+				CXFile file;
+				unsigned line, column;
+				clang_getExpansionLocation(
+					clang_getDiagnosticLocation(diagnostic),
+					&file,
+					&line,
+					&column,
+					nullptr);
+				auto location = Helpers::getString(clang_getFileName(file));
+				location += ", line " + std::to_string(line) + ", column " + std::to_string(column) + "";
+				criticalErrors.push_back(diagnosticMessage + " (please, include the header) (" + location + ")");
 			}
 		}
 		
