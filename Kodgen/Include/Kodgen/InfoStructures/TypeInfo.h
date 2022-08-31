@@ -176,6 +176,18 @@ namespace kodgen
 			std::vector<TemplateParamInfo> const&	getTemplateParameters()														const	noexcept;
 
 			/**
+			*	@brief	Compute the template parameters signature if the type info is a templated type.
+			*			Ex: template <typename T, int U, template <typename> typename V>
+			*				will output
+			*				typename, int, template <typename> typename
+			* 
+			*	@param useAutoForNonTypeParams Should all non-type parameters be replaced by the auto keyword?
+			* 
+			*	@return The template signature of the type if the type info is a template type, else an empty string.
+			*/
+			std::string								computeTemplateSignature(bool useAutoForNonTypeParams)						const	noexcept;
+		
+			/**
 			*	@brief Check whether this type is template or not.
 			* 
 			*	@return true if the type depends on other types, else false.

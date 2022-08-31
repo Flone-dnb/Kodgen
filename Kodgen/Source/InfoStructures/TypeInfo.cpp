@@ -389,6 +389,40 @@ std::vector<TemplateParamInfo> const& TypeInfo::getTemplateParameters() const no
 	return _templateParameters;
 }
 
+std::string TypeInfo::computeTemplateSignature(bool useAutoForNonTypeParams) const noexcept
+{
+	std::string result;
+
+	for (TemplateParamInfo const& templateParam : _templateParameters)
+	{
+		switch (templateParam.kind)
+		{
+		case ETemplateParameterKind::TypeTemplateParameter:
+			result += "typename";
+			break;
+
+		case ETemplateParameterKind::NonTypeTemplateParameter:
+			result += useAutoForNonTypeParams ? "auto" : templateParam.type->getName();
+			break;
+
+		case ETemplateParameterKind::TemplateTemplateParameter:
+			result += "template <" + templateParam.type->computeTemplateSignature(useAutoForNonTypeParams) + "> typename";
+			break;
+
+		default:
+			result += "RFK_UNDEFINED";
+			break;
+		}
+
+		result += ",";
+	}
+
+	//Remove last ","
+	result.pop_back();
+
+	return result;
+}
+
 bool TypeInfo::isTemplateType() const noexcept
 {
 	return !_templateParameters.empty();
