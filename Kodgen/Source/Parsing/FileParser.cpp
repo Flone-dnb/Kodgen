@@ -59,8 +59,8 @@ bool FileParser::parse(fs::path const& toParseFile, FileParsingResult& out_resul
 
 		if (translationUnit != nullptr)
 		{
-			// Look if there were critical errors.
-			const auto criticalErrors = findCriticalErrors(translationUnit);
+			// Look if there were errors.
+			const auto criticalErrors = findStandardTypesErrors(translationUnit);
 			if (criticalErrors.empty())
 			{
 				ParsingContext& context = pushContext(translationUnit, out_result);
@@ -280,7 +280,7 @@ void FileParser::postParse(fs::path const&, FileParsingResult const&) noexcept
 	*/
 }
 
-std::vector<std::string> FileParser::findCriticalErrors(CXTranslationUnit const& translationUnit) const noexcept
+std::vector<std::string> FileParser::findStandardTypesErrors(CXTranslationUnit const& translationUnit) const noexcept
 {
 	const CXDiagnosticSet diagnostics = clang_getDiagnosticSetFromTU(translationUnit);
 	const unsigned int diagnosticsCount = clang_getNumDiagnosticsInSet(diagnostics);
@@ -295,13 +295,15 @@ std::vector<std::string> FileParser::findCriticalErrors(CXTranslationUnit const&
 
 		if (diagnosticMessage.find("error:") != std::string::npos)
 		{
-			if (diagnosticMessage.find("use of undeclared identifier") != std::string::npos)
+			// Check for std::string and std::vector types.
+			if (diagnosticMessage.find("use of undeclared identifier 'std'") != std::string::npos ||
+				diagnosticMessage.find("use of undeclared identifier 'string'") != std::string::npos ||
+				diagnosticMessage.find("unknown type name 'string'") != std::string::npos ||
+				diagnosticMessage.find("no member named 'string' in namespace 'std'") != std::string::npos ||
+				diagnosticMessage.find("no template named 'vector' in namespace 'std'") != std::string::npos ||
+				diagnosticMessage.find("no template named 'vector'") != std::string::npos)
 			{
-				criticalErrors.push_back(diagnosticMessage + " (did you forgot to include the header?)");
-			}
-			else if (diagnosticMessage.find("no template named") != std::string::npos)
-			{
-				criticalErrors.push_back(diagnosticMessage + " (did you forgot to include the header?)");
+				criticalErrors.push_back(diagnosticMessage + " (please, include the header)");
 			}
 		}
 		
