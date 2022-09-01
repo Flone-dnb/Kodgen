@@ -40,6 +40,9 @@ projectIncludeDirectories = [
 # Must be one of "msvc", "clang++", "g++"
 compilerExeName = "clang++"
 
+# Additional arguments to add to libclang
+additionalClangArguments = ""
+
 # Abort parsing on first encountered error
 shouldAbortParsingOnFirstError = true
 

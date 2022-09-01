@@ -104,6 +104,8 @@ void ParsingSettings::refreshCompilationArguments(ILogger* logger) noexcept
 	//Parsing C++
 	_compilationArguments.emplace_back("-xc++");
 
+	_compilationArguments.emplace_back(_additionalClangArguments.data());
+
 #if KODGEN_DEV
 	_compilationArguments.emplace_back("-v");
 #endif
@@ -142,6 +144,7 @@ bool ParsingSettings::loadSettingsValues(toml::value const& tomlData, ILogger* l
 		loadShouldLogDiagnostic(tomlParsingSettings, logger);
 		loadCompilerExeName(tomlParsingSettings, logger);
 		loadProjectIncludeDirectories(tomlParsingSettings, logger);
+		loadAdditionalClangArguments(tomlParsingSettings, logger);
 
 		return propertyParsingSettings.loadSettingsValues(tomlParsingSettings, logger);
 	}
@@ -231,6 +234,14 @@ void ParsingSettings::loadShouldAbortParsingOnFirstError(toml::value const& toml
 	if (TomlUtility::updateSetting(tomlFileParsingSettings, "shouldAbortParsingOnFirstError", shouldAbortParsingOnFirstError, logger) && logger != nullptr)
 	{
 		logger->log("[TOML] Load shouldAbortParsingOnFirstError: " + Helpers::toString(shouldAbortParsingOnFirstError));
+	}
+}
+
+void ParsingSettings::loadAdditionalClangArguments(toml::value const& tomlFileParsingSettings, ILogger* logger) noexcept
+{
+	if (TomlUtility::updateSetting(tomlFileParsingSettings, "additionalClangArguments", _additionalClangArguments, logger) && logger != nullptr)
+	{
+		logger->log("[TOML] Load additionalClangArguments: " + _additionalClangArguments);
 	}
 }
 

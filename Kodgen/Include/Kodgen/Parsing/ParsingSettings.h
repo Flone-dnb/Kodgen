@@ -38,6 +38,8 @@ namespace kodgen
 			*/
 			std::string								_compilerExeName				= "";
 
+			std::string                             _additionalClangArguments;
+
 			/** Variables used to build compilation command line. */
 			std::string								_kodgenParsingMacro			= "-D" + parsingMacro;
 			std::string								_cppVersionCommandLine;
@@ -122,6 +124,15 @@ namespace kodgen
 			*/
 			void	loadCompilerExeName(toml::value const&	parsingSettings,
 										ILogger*			logger)							noexcept;
+
+			/**
+			*	@brief Load the additionalClangArguments setting from toml.
+			*
+			*	@param parsingSettings	Toml content.
+			*	@param logger			Optional logger used to issue loading logs. Can be nullptr.
+			*/
+			void	loadAdditionalClangArguments(toml::value const&	parsingSettings,
+												 ILogger*			logger)			noexcept;
 
 			/**
 			*	@brief	Load the _projectIncludeDirectories setting from toml.
