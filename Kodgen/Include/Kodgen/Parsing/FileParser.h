@@ -9,6 +9,7 @@
 
 #include <string>
 #include <vector>
+#include <set>
 #include <memory>	//std::shared_ptr
 
 #include <clang-c/Index.h>
@@ -19,6 +20,7 @@
 #include "Kodgen/Parsing/PropertyParser.h"
 #include "Kodgen/Misc/Filesystem.h"
 #include "Kodgen/Misc/ILogger.h"
+#include <Kodgen/CodeGen/Macro/MacroCodeGenUnitSettings.h>
 
 namespace kodgen
 {
@@ -110,14 +112,44 @@ namespace kodgen
 			bool						logDiagnostic(CXTranslationUnit const& translationUnit)	const	noexcept;
 
 			/**
-			*	@brief Looks if there were some errors related to not found STL types after parsing of the
-			*	provided translation unit (which might cause incorrect type information when using reflection).
+			*	Splits class footer macro pattern into two parts between "##...##" substring. For example:
+			*	for "##CLASSFULLNAME##_GENERATED" it will return a pair of "" (empty) and "_GENERATED".
 			*
-			*	@param translationUnit Translation unit we want to check.
-			* 
+			*	@param classFooterMacroPattern class footer macro pattern.
+			*
+			*	@return a pair of strings between "##...##" substring.
+			*/
+			static std::pair<std::string, std::string> splitClassFooterMacroPattern(const std::string& classFooterMacroPattern);
+
+			/**
+			*	Clears the file and adds "#define" statements for the specified macros.
+			*
+			*	@param filePath           File in which to define macros.
+			*	@param macroNamesToDefine Macro names to define.
+			*
+			*	@retun true if successfull, false is failed.
+			*/
+			static bool populateFileWithMacros(const fs::path& filePath, const std::set<std::string>& macroNamesToDefine);
+		
+			/**
+			*	@brief Returns all errors found during translation unit parsing.
+			*
+			*   @parma toParseFile					File that was used in parsing.
+			*	@param translationUnit				Translation unit we want to check.
+			*	@param codeGenSettings				Code generation settings that was used.
+			*	@param notFoundGeneratedMacroNames  Set of GENERATED macro names that were not found
+			*	during parsing.
+			*
+			*	@remark This function ignores errors caused by including generated headers or
+			*	using GENERATED or reflection macros.
+			*
 			*	@return array of errors (if found).
 			*/
-			std::vector<std::string>	findStandardTypesErrors(CXTranslationUnit const& translationUnit)	const	noexcept;
+			std::vector<std::string> getErrors(
+				fs::path const& toParseFile,
+				CXTranslationUnit const& translationUnit,
+				const kodgen::MacroCodeGenUnitSettings* codeGenSettings,
+				std::set<std::string>& notFoundGeneratedMacroNames) const	noexcept;
 
 			/**
 			*	@brief Helper to get the ParsingResult contained in the context as a FileParsingResult.
@@ -130,9 +162,9 @@ namespace kodgen
 			/**
 			*	@brief Overridable method called just before starting the parsing process of a file
 			*
-			*	@param parseFile Path to the file which is about to be parsed
+			*	@param parseFile Path to the file which is about to be parsed.
 			*/
-			virtual void preParse(fs::path const& parseFile)									noexcept;
+			virtual void preParse(fs::path const& parseFile)	noexcept;
 
 			/**
 			*	@brief Overridable method called just after the parsing process has been finished
@@ -155,13 +187,15 @@ namespace kodgen
 			/**
 			*	@brief Parse the file and fill the FileParsingResult.
 			*
-			*	@param toParseFile	Path to the file to parse.
-			*	@param out_result	Result filled while parsing the file.
+			*	@param toParseFile	   Path to the file to parse.
+			*	@param out_result	   Result filled while parsing the file.
+			*	@param codeGenSettings Code generation settings.
 			*
 			*	@return true if the parsing process finished without error, else false
 			*/
 			bool					parse(fs::path const&					toParseFile,
-										  FileParsingResult&				out_result)		noexcept;
+										  FileParsingResult&				out_result,
+										  const kodgen::MacroCodeGenUnitSettings* codeGenSettings)		noexcept;
 
 			/**
 			*	@brief Getter for _settings field.

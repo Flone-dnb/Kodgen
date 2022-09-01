@@ -16,6 +16,8 @@ void CodeGenManager::processFiles(FileParserType& fileParser, CodeGenUnitType& c
 
 	//Launch all parsing -> generation processes
 	std::shared_ptr<TaskBase> parsingTask;
+
+	const kodgen::MacroCodeGenUnitSettings* codeGenSettings = codeGenUnit.getSettings();
 	
 	for (int i = 0; i < iterationCount; i++)
 	{
@@ -24,13 +26,13 @@ void CodeGenManager::processFiles(FileParserType& fileParser, CodeGenUnitType& c
 
 		for (fs::path const& file : toProcessFiles)
 		{
-			auto parsingTaskLambda = [&fileParser, &file](TaskBase*) -> FileParsingResult
+			auto parsingTaskLambda = [codeGenSettings, &fileParser, &file](TaskBase*) -> FileParsingResult
 			{
 				//Copy a parser for this task
 				FileParserType		fileParserCopy = fileParser;
 				FileParsingResult	parsingResult;
 
-				fileParserCopy.parse(file, parsingResult);
+				fileParserCopy.parse(file, parsingResult, codeGenSettings);
 
 				return parsingResult;
 			};
