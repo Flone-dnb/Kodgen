@@ -186,7 +186,7 @@ namespace kodgen
 			*	@return The template signature of the type if the type info is a template type, else an empty string.
 			*/
 			std::string								computeTemplateSignature(bool useAutoForNonTypeParams)						const	noexcept;
-		
+
 			/**
 			*	@brief Check whether this type is template or not.
 			* 

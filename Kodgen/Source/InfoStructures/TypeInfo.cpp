@@ -110,7 +110,7 @@ std::string	TypeInfo::computeClassTemplateFullName(CXCursor cursor) noexcept
 		result = Helpers::getString(clang_getCursorSpelling(current)) + "::" + result;
 
 		last = current;
-		current = clang_getCursorSemanticParent(cursor);
+		current = clang_getCursorSemanticParent(current);
 	}
 
 	return result;
@@ -397,21 +397,21 @@ std::string TypeInfo::computeTemplateSignature(bool useAutoForNonTypeParams) con
 	{
 		switch (templateParam.kind)
 		{
-		case ETemplateParameterKind::TypeTemplateParameter:
-			result += "typename";
-			break;
+			case ETemplateParameterKind::TypeTemplateParameter:
+				result += "typename";
+				break;
 
-		case ETemplateParameterKind::NonTypeTemplateParameter:
-			result += useAutoForNonTypeParams ? "auto" : templateParam.type->getName();
-			break;
+			case ETemplateParameterKind::NonTypeTemplateParameter:
+				result += useAutoForNonTypeParams ? "auto" : templateParam.type->getName();
+				break;
 
-		case ETemplateParameterKind::TemplateTemplateParameter:
-			result += "template <" + templateParam.type->computeTemplateSignature(useAutoForNonTypeParams) + "> typename";
-			break;
+			case ETemplateParameterKind::TemplateTemplateParameter:
+				result += "template <" + templateParam.type->computeTemplateSignature(useAutoForNonTypeParams) + "> typename";
+				break;
 
-		default:
-			result += "RFK_UNDEFINED";
-			break;
+			default:
+				result += "RFK_UNDEFINED";
+				break;
 		}
 
 		result += ",";
