@@ -58,6 +58,44 @@ bool FileParser::populateFileWithMacros(const fs::path& filePath, const std::set
 	return true;
 }
 
+bool FileParser::prepareForParsing(fs::path const& toParseFile, const kodgen::MacroCodeGenUnitSettings* codeGenSettings) noexcept
+{
+	assert(_settings.use_count() != 0);
+
+	logger->log("Starting pre-parsing step for " + toParseFile.string(), ILogger::ELogSeverity::Info);
+
+	if (!fs::exists(toParseFile) || fs::is_directory(toParseFile)) return false;
+
+	// Do initial parsing.
+	CXTranslationUnit translationUnit = clang_parseTranslationUnit(_clangIndex, toParseFile.string().c_str(), _settings->getCompilationArguments().data(), static_cast<int32>(_settings->getCompilationArguments().size()), nullptr, 0, CXTranslationUnit_SkipFunctionBodies | CXTranslationUnit_Incomplete | CXTranslationUnit_KeepGoing);
+	if (!translationUnit)
+	{
+		logger->log("Failed to initialize translation unit for file: " + toParseFile.string(), ILogger::ELogSeverity::Error);
+		return false;
+	}
+
+	// Process errors.
+	std::set<std::string> notFoundGeneratedMacroNames;
+	const auto errors = getErrors(toParseFile, translationUnit, codeGenSettings, notFoundGeneratedMacroNames);
+
+	if (!notFoundGeneratedMacroNames.empty())
+	{
+		// Populate generated file with macros.
+		const auto generatedFilePath = codeGenSettings->getOutputDirectory() / codeGenSettings->getGeneratedHeaderFileName(toParseFile);
+		if (!populateFileWithMacros(generatedFilePath, notFoundGeneratedMacroNames))
+		{
+			// Failed to populate.
+			logger->log("Failed to populate macros for generated file: " + generatedFilePath.string(), ILogger::ELogSeverity::Error);
+			clang_disposeTranslationUnit(translationUnit);
+			return false;
+		}
+	}
+	
+	clang_disposeTranslationUnit(translationUnit);
+
+	return true;
+}
+
 bool FileParser::parse(fs::path const& toParseFile, FileParsingResult& out_result, const kodgen::MacroCodeGenUnitSettings* codeGenSettings) noexcept
 {
 	assert(_settings.use_count() != 0);
@@ -71,51 +109,15 @@ bool FileParser::parse(fs::path const& toParseFile, FileParsingResult& out_resul
 		//Fill the parsed file info
 		out_result.parsedFile = FilesystemHelpers::sanitizePath(toParseFile);
 
-		// Prepare arrays for errors.
-		std::set<std::string> notFoundGeneratedMacroNames;
-		std::vector<std::string> errors;
-
-		// Prepare variables for parsing.
-		bool rerunParsing = false;
-		bool populatedGeneratedFileWithMacros = false;
-		CXTranslationUnit translationUnit;
-
-		do
-		{
-			rerunParsing = false;
-			
-			// Parse the given file.
-			translationUnit = clang_parseTranslationUnit(_clangIndex, toParseFile.string().c_str(), _settings->getCompilationArguments().data(), static_cast<int32>(_settings->getCompilationArguments().size()), nullptr, 0, CXTranslationUnit_SkipFunctionBodies | CXTranslationUnit_Incomplete | CXTranslationUnit_KeepGoing);
-			if (translationUnit != nullptr)
-			{
-				errors = getErrors(toParseFile, translationUnit, codeGenSettings, notFoundGeneratedMacroNames);
-				if (!populatedGeneratedFileWithMacros && !notFoundGeneratedMacroNames.empty())
-				{
-					const auto generatedFilePath = codeGenSettings->getOutputDirectory() / codeGenSettings->getGeneratedHeaderFileName(toParseFile);
-					if (!populateFileWithMacros(generatedFilePath, notFoundGeneratedMacroNames))
-					{
-						out_result.errors.emplace_back("Failed to populate the generated file " + generatedFilePath.string() + " with macros.");
-						postParse(toParseFile, out_result);
-						return false;
-					}
-
-					notFoundGeneratedMacroNames.clear();
-					populatedGeneratedFileWithMacros = true;
-					rerunParsing = true;
-				}
-				else if (populatedGeneratedFileWithMacros)
-				{
-					// Clear generated file as it will be filled with an actual information.
-					const auto generatedFilePath = codeGenSettings->getOutputDirectory() / codeGenSettings->getGeneratedHeaderFileName(toParseFile);
-					std::ofstream file(generatedFilePath); // truncate the file
-					file.close();
-				}
-			}
-		}while(rerunParsing);
+		// Parse the given file.
+		auto translationUnit = clang_parseTranslationUnit(_clangIndex, toParseFile.string().c_str(), _settings->getCompilationArguments().data(), static_cast<int32>(_settings->getCompilationArguments().size()), nullptr, 0, CXTranslationUnit_SkipFunctionBodies | CXTranslationUnit_Incomplete | CXTranslationUnit_KeepGoing);
 		
 		if (translationUnit != nullptr)
 		{
-			if (errors.empty())
+			std::set<std::string> notFoundGeneratedMacroNames;
+			const auto errors = getErrors(toParseFile, translationUnit, codeGenSettings, notFoundGeneratedMacroNames);
+			
+			if (errors.empty() && notFoundGeneratedMacroNames.empty())
 			{
 				ParsingContext& context = pushContext(translationUnit, out_result);
 
@@ -140,8 +142,6 @@ bool FileParser::parse(fs::path const& toParseFile, FileParsingResult& out_resul
 				{
 					logDiagnostic(translationUnit);
 				}
-
-				clang_disposeTranslationUnit(translationUnit);
 			}
 			else
 			{
@@ -149,7 +149,13 @@ bool FileParser::parse(fs::path const& toParseFile, FileParsingResult& out_resul
 				{
 					out_result.errors.emplace_back(message);
 				}
+				for (const auto& macroName : notFoundGeneratedMacroNames)
+				{
+					out_result.errors.emplace_back("Unknown macro: " + macroName);
+				}
 			}
+
+			clang_disposeTranslationUnit(translationUnit);
 		}
 		else
 		{
@@ -334,10 +340,10 @@ void FileParser::postParse(fs::path const&, FileParsingResult const&) noexcept
 	*/
 }
 
-std::pair<std::string, std::string> FileParser::splitClassFooterMacroPattern(const std::string& classFooterMacroPattern)
+std::pair<std::string, std::string> FileParser::splitMacroPattern(const std::string& macroPattern)
 {
 	// Get left text.
-	const auto leftSharpPos = classFooterMacroPattern.find('#');
+	const auto leftSharpPos = macroPattern.find('#');
 	if (leftSharpPos == std::string::npos)
 	{
 		return std::make_pair("", "");
@@ -345,19 +351,19 @@ std::pair<std::string, std::string> FileParser::splitClassFooterMacroPattern(con
 	std::string leftText;
 	if (leftSharpPos != 0)
 	{
-		leftText = classFooterMacroPattern.substr(0, leftSharpPos);
+		leftText = macroPattern.substr(0, leftSharpPos);
 	}
 
 	// Get right text.
-	const auto rightSharpPos = classFooterMacroPattern.rfind('#');
+	const auto rightSharpPos = macroPattern.rfind('#');
 	if (rightSharpPos == std::string::npos)
 	{
 		return std::make_pair("", "");
 	}
 	std::string rightText;
-	if (rightSharpPos != classFooterMacroPattern.size())
+	if (rightSharpPos != macroPattern.size())
 	{
-		rightText = classFooterMacroPattern.substr(rightSharpPos + 1);
+		rightText = macroPattern.substr(rightSharpPos + 1);
 	}
 
 	return std::make_pair(leftText, rightText);
@@ -373,7 +379,7 @@ std::vector<std::string> FileParser::getErrors(
 	const unsigned int diagnosticsCount = clang_getNumDiagnosticsInSet(diagnostics);
 	const std::string generatedHeaderFilename = codeGenSettings->getGeneratedHeaderFileName(toParseFile).filename().string();
 	const std::string fileGeneratedMacroName = codeGenSettings->getHeaderFileFooterMacro(toParseFile);
-	const auto [leftClassFooterMacroText, rightClassFooterMacroText] = splitClassFooterMacroPattern(codeGenSettings->getClassFooterMacroPattern());
+	const auto [leftClassFooterMacroText, rightClassFooterMacroText] = splitMacroPattern(codeGenSettings->getClassFooterMacroPattern());
 	if (leftClassFooterMacroText.empty() && rightClassFooterMacroText.empty())
 	{
 		return {"failed to split class footer macro pattern"};

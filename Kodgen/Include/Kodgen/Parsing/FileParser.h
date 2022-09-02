@@ -112,14 +112,14 @@ namespace kodgen
 			bool						logDiagnostic(CXTranslationUnit const& translationUnit)	const	noexcept;
 
 			/**
-			*	Splits class footer macro pattern into two parts between "##...##" substring. For example:
+			*	Splits macro pattern into two parts between "##...##" substring. For example:
 			*	for "##CLASSFULLNAME##_GENERATED" it will return a pair of "" (empty) and "_GENERATED".
 			*
-			*	@param classFooterMacroPattern class footer macro pattern.
+			*	@param macroPattern Macro pattern.
 			*
 			*	@return a pair of strings between "##...##" substring.
 			*/
-			static std::pair<std::string, std::string> splitClassFooterMacroPattern(const std::string& classFooterMacroPattern);
+			static std::pair<std::string, std::string> splitMacroPattern(const std::string& macroPattern);
 
 			/**
 			*	Clears the file and adds "#define" statements for the specified macros.
@@ -185,6 +185,17 @@ namespace kodgen
 			virtual ~FileParser()			noexcept;
 
 			/**
+			*	@brief Prepares initial generated file for parsing.
+			*
+			*	@param toParseFile	   Path to the file to parse.
+			*	@param codeGenSettings Code generation settings.
+			*
+			*	@return true if the parsing process finished without error, else false
+			*/
+			bool					prepareForParsing(fs::path const&					      toParseFile,
+													  const kodgen::MacroCodeGenUnitSettings* codeGenSettings)		noexcept;
+
+			/**
 			*	@brief Parse the file and fill the FileParsingResult.
 			*
 			*	@param toParseFile	   Path to the file to parse.
@@ -193,8 +204,8 @@ namespace kodgen
 			*
 			*	@return true if the parsing process finished without error, else false
 			*/
-			bool					parse(fs::path const&					toParseFile,
-										  FileParsingResult&				out_result,
+			bool					parse(fs::path const&						  toParseFile,
+										  FileParsingResult&				      out_result,
 										  const kodgen::MacroCodeGenUnitSettings* codeGenSettings)		noexcept;
 
 			/**
