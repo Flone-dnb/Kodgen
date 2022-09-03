@@ -104,6 +104,9 @@ void ParsingSettings::refreshCompilationArguments(ILogger* logger) noexcept
 	//Parsing C++
 	_compilationArguments.emplace_back("-xc++");
 
+	// Disable error limit so our pre-parsing step will not skip anything.
+	_compilationArguments.emplace_back("-ferror-limit=0");
+
 	_compilationArguments.emplace_back(_additionalClangArguments.data());
 
 #if KODGEN_DEV
