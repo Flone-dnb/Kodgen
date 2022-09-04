@@ -145,6 +145,7 @@ bool ParsingSettings::loadSettingsValues(toml::value const& tomlData, ILogger* l
 		loadShouldParseAllEntities(tomlParsingSettings, logger);
 		loadShouldAbortParsingOnFirstError(tomlParsingSettings, logger);
 		loadShouldLogDiagnostic(tomlParsingSettings, logger);
+		loadShouldFailCodeGenerationOnClangErrors(tomlParsingSettings, logger);
 		loadCompilerExeName(tomlParsingSettings, logger);
 		loadProjectIncludeDirectories(tomlParsingSettings, logger);
 		loadAdditionalClangArguments(tomlParsingSettings, logger);
@@ -245,6 +246,14 @@ void ParsingSettings::loadAdditionalClangArguments(toml::value const& tomlFilePa
 	if (TomlUtility::updateSetting(tomlFileParsingSettings, "additionalClangArguments", _additionalClangArguments, logger) && logger != nullptr)
 	{
 		logger->log("[TOML] Load additionalClangArguments: " + _additionalClangArguments);
+	}
+}
+
+void ParsingSettings::loadShouldFailCodeGenerationOnClangErrors(toml::value const& tomlFileParsingSettings, ILogger* logger) noexcept
+{
+	if (TomlUtility::updateSetting(tomlFileParsingSettings, "shouldFailCodeGenerationOnClangErrors", shouldFailCodeGenerationOnClangErrors, logger) && logger != nullptr)
+	{
+		logger->log("[TOML] Load shouldFailCodeGenerationOnClangErrors: " + Helpers::toString(shouldFailCodeGenerationOnClangErrors));
 	}
 }
 

@@ -57,6 +57,9 @@ shouldParseAllMethods = false
 shouldParseAllEnums = false
 shouldParseAllEnumValues = true
 
+# Ignores parsing errors, may lead to incorrect type information for non-reflected types.
+shouldFailCodeGenerationOnClangErrors = false
+
 shouldLogDiagnostic = false
 
 propertySeparator = ","

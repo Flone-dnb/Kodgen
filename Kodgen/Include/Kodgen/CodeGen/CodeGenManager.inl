@@ -8,8 +8,134 @@
 template <typename FileParserType, typename CodeGenUnitType>
 void CodeGenManager::processFiles(FileParserType& fileParser, CodeGenUnitType& codeGenUnit, std::set<fs::path> const& toProcessFiles, CodeGenResult& out_genResult) noexcept
 {
+	ParsingSettings parsingSettings = fileParser.getSettings();
+	if (!parsingSettings.shouldFailCodeGenerationOnClangErrors)
+	{
+		processFilesIgnoreErrors(fileParser, codeGenUnit, toProcessFiles, out_genResult);
+	}
+	else
+	{
+		processFilesFailOnErrors(fileParser, codeGenUnit, toProcessFiles, out_genResult);
+	}
+}
+
+template <typename FileParserType, typename CodeGenUnitType>
+void CodeGenManager::processFilesFailOnErrors(FileParserType& fileParser, CodeGenUnitType& codeGenUnit, std::set<fs::path> const& toProcessFiles, CodeGenResult& out_genResult) noexcept
+{
 	std::vector<std::shared_ptr<TaskBase>>	generationTasks;
-	std::vector<std::shared_ptr<TaskBase>>	parsingTasks;
+
+	//Reserve enough space for all tasks
+	generationTasks.reserve(toProcessFiles.size());
+
+	//Launch all parsing -> generation processes
+	std::shared_ptr<TaskBase> parsingTask;
+	std::shared_ptr<TaskBase> preParsingTask;
+
+	const kodgen::MacroCodeGenUnitSettings* codeGenSettings = codeGenUnit.getSettings();
+
+	//Lock the thread pool until all tasks have been pushed to avoid competing for the tasks mutex
+	_threadPool.setIsRunning(false);
+
+	// First, run pre-parse step in which we will fill generated files
+	// with reflection macros (file/class macros).
+	// This will avoid the following issue: if we are using inheritance and we haven't
+	// generated parent's macros while parsing child class we will fail with an error.
+	for (fs::path const& file : toProcessFiles)
+	{
+		auto preParsingTaskLambda = [codeGenSettings, &fileParser, &file](TaskBase*) -> bool
+		{
+			FileParserType fileParserCopy = fileParser;
+			return fileParserCopy.prepareForParsing(file, codeGenSettings);
+		};
+
+		preParsingTask = _threadPool.submitTask(std::string("Pre-parsing ") + file.string(), preParsingTaskLambda);
+	}
+
+	// Wait for pre-parse step to finish.
+	_threadPool.setIsRunning(true);
+	_threadPool.joinWorkers();
+	_threadPool.setIsRunning(false);
+	
+	// Run parsing step.
+	std::vector<std::shared_ptr<TaskBase>> parsingTasks;
+	for (fs::path const& file : toProcessFiles)
+	{
+		auto parsingTaskLambda = [codeGenSettings, &fileParser, &file](TaskBase*) -> FileParsingResult
+		{
+			FileParsingResult	parsingResult;
+				
+			// Copy a parser for this task.
+			FileParserType		fileParserCopy = fileParser;
+
+			fileParserCopy.parseFailOnErrors(file, parsingResult, codeGenSettings);
+
+			return parsingResult;
+		};
+
+		//Add file to the list of parsed files before starting the task to avoid having to synchronize threads
+		out_genResult.parsedFiles.push_back(file);
+			
+		parsingTask = _threadPool.submitTask(std::string("Parsing ") + file.string(), parsingTaskLambda);
+		parsingTasks.push_back(parsingTask);
+	}
+
+	// Wait for parse step to finish.
+	// We wait here for all tasks to be finished because on the next step
+	// (the generation step) we will fill generated files with an actual data
+	// and this will clear existing macro defines that generated files have,
+	// but we need these macros for all parsing tasks to be finished without errors.
+	_threadPool.setIsRunning(true);
+	_threadPool.joinWorkers();
+	_threadPool.setIsRunning(false);
+
+	// Run code generation after all files were parsed.
+	size_t parsingTaskIndex = 0;
+	for (fs::path const& file : toProcessFiles)
+	{
+		// Clear generated file as it will be filled with an actual information.
+		// Right now it has some defines that were used for proper parsing.
+		const auto generatedFilePath = codeGenSettings->getOutputDirectory() / codeGenSettings->getGeneratedHeaderFileName(file);
+		std::ofstream generatedFile(generatedFilePath); // truncate the file
+		generatedFile.close();
+			
+		auto generationTaskLambda = [&codeGenUnit](TaskBase* parsingTask) -> CodeGenResult
+		{
+			CodeGenResult out_generationResult;
+
+			//Copy the generation unit model to have a fresh one for this generation unit
+			CodeGenUnitType	generationUnit = codeGenUnit;
+
+			// Get the result of the parsing task.
+			FileParsingResult parsingResult = TaskHelper::getDependencyResult<FileParsingResult>(parsingTask, 0u);
+
+			//Generate the file if no errors occured during parsing
+			if (parsingResult.errors.empty())
+			{
+				out_generationResult.completed = generationUnit.generateCode(parsingResult);
+			}
+
+			return out_generationResult;
+		};
+			
+		generationTasks.emplace_back(_threadPool.submitTask(std::string("Generation ") + file.string(), generationTaskLambda, { parsingTasks[parsingTaskIndex] }));
+		parsingTaskIndex += 1;
+	}
+
+	// Wait for code generation.
+	_threadPool.setIsRunning(true);
+	_threadPool.joinWorkers();
+
+	//Merge all generation results together
+	for (std::shared_ptr<TaskBase>& task : generationTasks)
+	{
+		out_genResult.mergeResult(TaskHelper::getResult<CodeGenResult>(task.get()));
+	}
+}
+
+template <typename FileParserType, typename CodeGenUnitType>
+void CodeGenManager::processFilesIgnoreErrors(FileParserType& fileParser, CodeGenUnitType& codeGenUnit, std::set<fs::path> const& toProcessFiles, CodeGenResult& out_genResult) noexcept
+{
+	std::vector<std::shared_ptr<TaskBase>>	generationTasks;
 	uint8									iterationCount = codeGenUnit.getIterationCount();
 
 	//Reserve enough space for all tasks
@@ -17,78 +143,25 @@ void CodeGenManager::processFiles(FileParserType& fileParser, CodeGenUnitType& c
 
 	//Launch all parsing -> generation processes
 	std::shared_ptr<TaskBase> parsingTask;
-	std::shared_ptr<TaskBase> preParsingTask;
-
-	const kodgen::MacroCodeGenUnitSettings* codeGenSettings = codeGenUnit.getSettings();
 	
 	for (int i = 0; i < iterationCount; i++)
 	{
 		//Lock the thread pool until all tasks have been pushed to avoid competing for the tasks mutex
 		_threadPool.setIsRunning(false);
 
-		// First, run pre-parse step in which we will fill generated files
-		// with reflection macros (file/class macros).
-		// This will avoid the following issue: if we are using inheritance and we haven't
-		// generated parent's data while parsing child class we will fail with an error.
 		for (fs::path const& file : toProcessFiles)
 		{
-			auto preParsingTaskLambda = [codeGenSettings, &fileParser, &file](TaskBase*) -> bool
+			auto parsingTaskLambda = [&fileParser, &file](TaskBase*) -> FileParsingResult
 			{
-				FileParserType fileParserCopy = fileParser;
-				return fileParserCopy.prepareForParsing(file, codeGenSettings);
-			};
-
-			preParsingTask = _threadPool.submitTask(std::string("Pre-parsing ") + std::to_string(i), preParsingTaskLambda);
-		}
-
-		// Wait for pre-parse step to finish.
-		_threadPool.setIsRunning(true);
-		_threadPool.joinWorkers();
-		_threadPool.setIsRunning(false);
-
-		// Run parsing step.
-		for (fs::path const& file : toProcessFiles)
-		{
-			auto parsingTaskLambda = [codeGenSettings, &fileParser, &file](TaskBase*) -> FileParsingResult
-			{
-				FileParsingResult	parsingResult;
-				
 				//Copy a parser for this task
 				FileParserType		fileParserCopy = fileParser;
+				FileParsingResult	parsingResult;
 
-				fileParserCopy.parse(file, parsingResult, codeGenSettings);
+				fileParserCopy.parseIgnoreErrors(file, parsingResult);
 
 				return parsingResult;
 			};
 
-			//Add file to the list of parsed files before starting the task to avoid having to synchronize threads
-			out_genResult.parsedFiles.push_back(file);
-			
-			//Parse files
-			//For multiple iterations on a same file, the parsing task depends on the previous generation task for the same file
-			parsingTask = _threadPool.submitTask(std::string("Parsing ") + std::to_string(i), parsingTaskLambda);
-			parsingTasks.push_back(parsingTask);
-		}
-
-		// Wait for parse step to finish.
-		// We wait here for all tasks to be finished because on the next step
-		// (the generation step) we will fill generated files with an actual data
-		// and this will clear existing macro defines that generated files have,
-		// but we need these macros for all parsing tasks to be finished without errors.
-		_threadPool.setIsRunning(true);
-		_threadPool.joinWorkers();
-		_threadPool.setIsRunning(false);
-
-		// Run code generation after all files were parsed.
-		size_t parsingTaskIndex = 0;
-		for (fs::path const& file : toProcessFiles)
-		{
-			// Clear generated file as it will be filled with an actual information.
-			// Right now it has some defines that were used for proper parsing.
-			const auto generatedFilePath = codeGenSettings->getOutputDirectory() / codeGenSettings->getGeneratedHeaderFileName(file);
-			std::ofstream generatedFile(generatedFilePath); // truncate the file
-			generatedFile.close();
-			
 			auto generationTaskLambda = [&codeGenUnit](TaskBase* parsingTask) -> CodeGenResult
 			{
 				CodeGenResult out_generationResult;
@@ -107,15 +180,22 @@ void CodeGenManager::processFiles(FileParserType& fileParser, CodeGenUnitType& c
 
 				return out_generationResult;
 			};
-			
-			generationTasks.emplace_back(_threadPool.submitTask(std::string("Generation ") + std::to_string(i), generationTaskLambda, { parsingTasks[parsingTaskIndex] }));
-			parsingTaskIndex += 1;
+
+			//Add file to the list of parsed files before starting the task to avoid having to synchronize threads
+			out_genResult.parsedFiles.push_back(file);
+
+			//Parse files
+			//For multiple iterations on a same file, the parsing task depends on the previous generation task for the same file
+			parsingTask = _threadPool.submitTask(std::string("Parsing ") + std::to_string(i), parsingTaskLambda);
+
+			//Generate code
+			generationTasks.emplace_back(_threadPool.submitTask(std::string("Generation ") + std::to_string(i), generationTaskLambda, { parsingTask }));
 		}
 
-		// Wait for code generation.
+		//Wait for this iteration to complete before continuing any further
+		//(an iteration N depends on the iteration N - 1)
 		_threadPool.setIsRunning(true);
 		_threadPool.joinWorkers();
-		parsingTasks.clear();
 	}
 
 	//Merge all generation results together

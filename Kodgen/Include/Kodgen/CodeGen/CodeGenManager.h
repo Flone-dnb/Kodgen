@@ -43,6 +43,34 @@ namespace kodgen
 								 CodeGenResult&				out_genResult)										noexcept;
 
 			/**
+			*	@brief Process all provided files ignoring Clang parsing errors on multiple threads.
+			*	
+			*	@param fileParser		Original file parser to use to parse registered files. A copy of this parser will be used for each generation thread.
+			*	@param codeGenUnit		Generation unit used to generate files. It must have a clean state when this method is called.
+			*	@param toProcessFiles	Collection of all files to process.
+			*	@param out_genResult	Reference to the generation result to fill during file generation.
+			*/
+			template <typename FileParserType, typename CodeGenUnitType>
+			void	processFilesIgnoreErrors(FileParserType&			fileParser,
+											 CodeGenUnitType&			codeGenUnit,
+											 std::set<fs::path> const&	toProcessFiles,
+											 CodeGenResult&				out_genResult)							noexcept;
+
+			/**
+			*	@brief Process all provided files and fail on any Clang parsing errors on multiple threads.
+			*	
+			*	@param fileParser		Original file parser to use to parse registered files. A copy of this parser will be used for each generation thread.
+			*	@param codeGenUnit		Generation unit used to generate files. It must have a clean state when this method is called.
+			*	@param toProcessFiles	Collection of all files to process.
+			*	@param out_genResult	Reference to the generation result to fill during file generation.
+			*/
+			template <typename FileParserType, typename CodeGenUnitType>
+			void	processFilesFailOnErrors(FileParserType&			fileParser,
+											 CodeGenUnitType&			codeGenUnit,
+											 std::set<fs::path> const&	toProcessFiles,
+											 CodeGenResult&				out_genResult)							noexcept;
+
+			/**
 			*	@brief Identify all files which will be parsed & regenerated.
 			*	
 			*	@param codeGenUnit			Generation unit used to determine whether a file should be reparsed/regenerated or not.

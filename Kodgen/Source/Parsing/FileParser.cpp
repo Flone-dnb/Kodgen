@@ -96,7 +96,7 @@ bool FileParser::prepareForParsing(fs::path const& toParseFile, const kodgen::Ma
 	return true;
 }
 
-bool FileParser::parse(fs::path const& toParseFile, FileParsingResult& out_result, const kodgen::MacroCodeGenUnitSettings* codeGenSettings) noexcept
+bool FileParser::parseFailOnErrors(fs::path const& toParseFile, FileParsingResult& out_result, const kodgen::MacroCodeGenUnitSettings* codeGenSettings) noexcept
 {
 	assert(_settings.use_count() != 0);
 
@@ -153,6 +153,65 @@ bool FileParser::parse(fs::path const& toParseFile, FileParsingResult& out_resul
 				{
 					out_result.errors.emplace_back("Unknown macro: " + macroName);
 				}
+			}
+
+			clang_disposeTranslationUnit(translationUnit);
+		}
+		else
+		{
+			out_result.errors.emplace_back("Failed to initialize translation unit for file: " + toParseFile.string());
+		}
+	}
+	else
+	{
+		out_result.errors.emplace_back("File " + toParseFile.string() + " doesn't exist.");
+	}
+
+	postParse(toParseFile, out_result);
+
+	return isSuccess;
+}
+
+bool FileParser::parseIgnoreErrors(fs::path const& toParseFile, FileParsingResult& out_result) noexcept
+{
+	assert(_settings.use_count() != 0);
+
+	bool isSuccess = false;
+
+	preParse(toParseFile);
+
+	if (fs::exists(toParseFile) && !fs::is_directory(toParseFile))
+	{
+		//Fill the parsed file info
+		out_result.parsedFile = FilesystemHelpers::sanitizePath(toParseFile);
+
+		//Parse the given file
+		CXTranslationUnit translationUnit = clang_parseTranslationUnit(_clangIndex, toParseFile.string().c_str(), _settings->getCompilationArguments().data(), static_cast<int32>(_settings->getCompilationArguments().size()), nullptr, 0, CXTranslationUnit_SkipFunctionBodies | CXTranslationUnit_Incomplete | CXTranslationUnit_KeepGoing);
+
+		if (translationUnit != nullptr)
+		{
+			ParsingContext& context = pushContext(translationUnit, out_result);
+
+			if (clang_visitChildren(context.rootCursor, &FileParser::parseNestedEntity, this) || !out_result.errors.empty())
+			{
+				//ERROR
+			}
+			else
+			{
+				//Refresh all outer entities contained in the final result
+				refreshOuterEntity(out_result);
+
+				isSuccess = true;
+			}
+
+			popContext();
+
+			//There should not have any context left once parsing has finished
+			assert(contextsStack.empty());
+
+			if (_settings->shouldLogDiagnostic)
+			{
+				logDiagnostic(translationUnit);
 			}
 
 			clang_disposeTranslationUnit(translationUnit);

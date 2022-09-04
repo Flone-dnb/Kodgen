@@ -185,7 +185,7 @@ namespace kodgen
 			virtual ~FileParser()			noexcept;
 
 			/**
-			*	@brief Prepares initial generated file for parsing.
+			*	@brief Prepares initial generated file for parsing before calling to @ref parseFailOnErrors.
 			*
 			*	@param toParseFile	   Path to the file to parse.
 			*	@param codeGenSettings Code generation settings.
@@ -196,7 +196,18 @@ namespace kodgen
 													  const kodgen::MacroCodeGenUnitSettings* codeGenSettings)		noexcept;
 
 			/**
-			*	@brief Parse the file and fill the FileParsingResult.
+			*	@brief Parse the file and fill the FileParsingResult while ignoring any parsing errors.
+			*
+			*	@param toParseFile	   Path to the file to parse.
+			*	@param out_result	   Result filled while parsing the file.
+			*
+			*	@return true if the parsing process finished without error, else false
+			*/
+			bool					parseIgnoreErrors(fs::path const&						  toParseFile,
+													  FileParsingResult&				      out_result)		noexcept;
+
+			/**
+			*	@brief Parse the file and fill the FileParsingResult while failing on any parsing errors.
 			*
 			*	@param toParseFile	   Path to the file to parse.
 			*	@param out_result	   Result filled while parsing the file.
@@ -204,9 +215,9 @@ namespace kodgen
 			*
 			*	@return true if the parsing process finished without error, else false
 			*/
-			bool					parse(fs::path const&						  toParseFile,
-										  FileParsingResult&				      out_result,
-										  const kodgen::MacroCodeGenUnitSettings* codeGenSettings)		noexcept;
+			bool					parseFailOnErrors(fs::path const&						  toParseFile,
+													  FileParsingResult&				      out_result,
+													  const kodgen::MacroCodeGenUnitSettings* codeGenSettings)		noexcept;
 
 			/**
 			*	@brief Getter for _settings field.
