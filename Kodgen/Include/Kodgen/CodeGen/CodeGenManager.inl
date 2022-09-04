@@ -198,7 +198,7 @@ void CodeGenManager::processFilesFailOnErrors(FileParserType& fileParser, CodeGe
 			out_genResult.completed = false;
 		}
 		
-		for (const auto error : parsingResultsOfFailedFiles)
+        for (const auto& error : parsingResultsOfFailedFiles)
 		{
 			logger->log("While processing the following file: " + error.first.string() + ": " + error.second.toString(), kodgen::ILogger::ELogSeverity::Error);
 		}
