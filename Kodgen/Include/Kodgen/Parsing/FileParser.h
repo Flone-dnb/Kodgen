@@ -120,16 +120,6 @@ namespace kodgen
 			*	@return a pair of strings between "##...##" substring.
 			*/
 			static std::pair<std::string, std::string> splitMacroPattern(const std::string& macroPattern);
-
-			/**
-			*	Clears the file and adds "#define" statements for the specified macros.
-			*
-			*	@param filePath           File in which to define macros.
-			*	@param macroNamesToDefine Macro names to define.
-			*
-			*	@retun true if successfull, false is failed.
-			*/
-			static bool populateFileWithMacros(const fs::path& filePath, const std::set<std::string>& macroNamesToDefine);
 		
 			/**
 			*	@brief Returns all errors found during translation unit parsing.
@@ -187,13 +177,15 @@ namespace kodgen
 			/**
 			*	@brief Prepares initial generated file for parsing before calling to @ref parseFailOnErrors.
 			*
-			*	@param toParseFile	   Path to the file to parse.
-			*	@param codeGenSettings Code generation settings.
+			*	@param toParseFile					Path to the file to parse.
+			*	@param codeGenSettings				Code generation settings.
+			*	@param notFoundGeneratedMacroNames  Array of generated macros that needs to be defines.
 			*
 			*	@return true if the parsing process finished without error, else false
 			*/
 			bool					prepareForParsing(fs::path const&					      toParseFile,
-													  const kodgen::MacroCodeGenUnitSettings* codeGenSettings)		noexcept;
+													  const kodgen::MacroCodeGenUnitSettings* codeGenSettings,
+													  std::set<std::string>&                   notFoundGeneratedMacroNames)	noexcept;
 
 			/**
 			*	@brief Parse the file and fill the FileParsingResult while ignoring any parsing errors.
