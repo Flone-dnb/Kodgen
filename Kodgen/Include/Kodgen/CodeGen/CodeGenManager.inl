@@ -33,7 +33,7 @@ void CodeGenManager::processFilesFailOnErrors(FileParserType& fileParser, CodeGe
 
 	const kodgen::MacroCodeGenUnitSettings* codeGenSettings = codeGenUnit.getSettings();
 	std::set<fs::path> filesLeftToProcess = toProcessFiles;
-	std::vector<ParsingError> parsingResultsOfFailedFiles;
+	std::vector<std::pair<fs::path, ParsingError>> parsingResultsOfFailedFiles;
 	size_t filesLeftBefore = 0;
 	
 	// Process files in cycle.
@@ -111,7 +111,7 @@ void CodeGenManager::processFilesFailOnErrors(FileParserType& fileParser, CodeGe
 				{
 					for (const auto& error : parsingResult.errors)
 					{
-						parsingResultsOfFailedFiles.push_back(error);
+						parsingResultsOfFailedFiles.push_back(std::make_pair(file, error));
 					}
 					parsingResult.errors.clear();
 					filesLeftToProcess.insert(file);
@@ -198,9 +198,9 @@ void CodeGenManager::processFilesFailOnErrors(FileParserType& fileParser, CodeGe
 			out_genResult.completed = false;
 		}
 		
-		for (kodgen::ParsingError const& error : parsingResultsOfFailedFiles)
+		for (const auto error : parsingResultsOfFailedFiles)
 		{
-			logger->log(error.toString(), kodgen::ILogger::ELogSeverity::Error);
+			logger->log("While processing the following file: " + error.first.string() + ": " + error.second.toString(), kodgen::ILogger::ELogSeverity::Error);
 		}
 	}
 	
