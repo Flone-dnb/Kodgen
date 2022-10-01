@@ -126,6 +126,12 @@ void MacroCodeGenUnit::generateHeaderFile(MacroCodeGenEnv& env) noexcept
 	//Include the entity file
 	generatedHeader.writeLine("#include \"" + CodeGenUnitSettings::entityMacrosFilename.string() + "\"\n");
 
+	//Include tgc
+	generatedHeader.writeLine("#include \"tgc2/src/tgc2.h\"\n");
+
+	//Include rfk::Object
+	generatedHeader.writeLine("#include \"Refureku/Object.h\"\n");
+
 	//Write header file header code
 	generatedHeader.writeLine(std::move(_generatedCodePerLocation[static_cast<int>(ECodeGenLocation::HeaderFileHeader)]));
 
