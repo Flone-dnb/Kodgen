@@ -127,8 +127,7 @@ void MacroCodeGenUnit::generateHeaderFile(MacroCodeGenEnv& env) noexcept
 	generatedHeader.writeLine("#include \"" + CodeGenUnitSettings::entityMacrosFilename.string() + "\"\n");
 
 	//Include tgc
-	generatedHeader.writeLine("#include \"tgc2/src/tgc2.h\"\n");
-
+	generatedHeader.writeLine("#include \"tgc2/include/tgc2.h\"");
 	//Include rfk::Object
 	generatedHeader.writeLine("#include \"Refureku/Object.h\"\n");
 
