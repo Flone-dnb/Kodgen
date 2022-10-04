@@ -456,6 +456,10 @@ std::vector<std::string> FileParser::getErrors(
 				notFoundGeneratedMacroNames.insert(unknownTypeName);
 				continue;
 			}
+		}else if (diagnosticMessage == "unknown attribute 'dllexport' ignored" ||
+				 diagnosticMessage == "unknown attribute 'dllimport' ignored")
+		{
+			continue;
 		}
 
 		const auto location = errorFilePath.string() + ", line " + std::to_string(line) + ", column " + std::to_string(column) + "";
