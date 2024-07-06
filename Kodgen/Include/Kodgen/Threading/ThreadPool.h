@@ -7,6 +7,10 @@
 
 #pragma once
 
+#ifdef _MSC_VER < 1940
+#define _DISABLE_CONSTEXPR_MUTEX_CONSTRUCTOR
+#endif
+
 #include <string>
 #include <list>
 #include <vector>
